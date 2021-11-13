@@ -2,6 +2,8 @@
 #include<string.h>
 #include<stdlib.h>
 
+//TODO - --check flag to see if file has mixed tabs and spaces
+
 //flags for indent options
 int spaces = 0;
 int tabs = 1;
@@ -11,6 +13,7 @@ void print_help();
 void strip(char* line);
 char* indent(char* line, int level);
 int nq_search(char* needle, char* haystack);
+int mixed_indent(char* line);
 
 int main(int argc, char* argv[])
 {
@@ -71,6 +74,33 @@ void strip(char* line)
 	}
 }
 
+//returns 1 if tabs and spaces have been mixed
+int mixed_indent(char* line)
+{
+	int has_space = 0;
+	int has_tab = 0;
+	
+	for(int i = 0; i < strlen(line); i++)
+	{
+		if(line[i] == ' ')
+		{
+			has_space = 1;
+		}
+		else if(line[i] == '\t')
+		{
+			has_tab = 1;
+		}
+		
+		//non-whitespace character
+		else
+		{
+			break;
+		}
+	}
+	
+	return(has_space && has_tab);
+}
+
 //indent a previously stripped line to a new level
 char* indent(char* line, int level)
 {
@@ -110,7 +140,6 @@ char* indent(char* line, int level)
 }
 
 //search through a string while ignoring text from quotes
-//TODO - need to implement proper quote ignore
 int nq_search(char* needle, char* haystack)
 {
 	int haystack_len = strlen(haystack);
