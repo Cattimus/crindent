@@ -10,6 +10,7 @@ int indent_width = 4;
 void print_help();
 void strip(char* line);
 char* indent(char* line, int level);
+int nq_search(char* needle, char* haystack);
 
 int main(int argc, char* argv[])
 {
@@ -22,12 +23,16 @@ int main(int argc, char* argv[])
 	}
 	*/
 	
-	char test[] = "\t\t    This is a test\n";
-	printf("%s", test);
-	strip(test);
-	printf("%s", test);
-	char* new_str = indent(test, 2);
-	printf("%s", new_str);
+	char test[] = "\t\t    this \"is a test {\"\n";
+	
+	if(nq_search("{", test))
+	{
+		printf("String was found\n");
+	}
+	else
+	{
+		printf("String not found\n");
+	}
 	
 	
 	return 0;
@@ -102,4 +107,55 @@ char* indent(char* line, int level)
 		strcpy(to_return + (level * 4), line);
 		return to_return;
 	}
+}
+
+//search through a string while ignoring text from quotes
+//TODO - need to implement proper quote ignore
+int nq_search(char* needle, char* haystack)
+{
+	int haystack_len = strlen(haystack);
+	int needle_len = strlen(needle);
+	int in_quote = 0;
+		
+	for(int i = 0; i < strlen(haystack); i++)
+	{	
+		if(haystack[i] == '"')
+		{
+			//checking for escaped "
+			if(i > 0)
+			{
+				if(haystack[i - 1] != '\\')
+				{
+					in_quote = !in_quote;
+				}
+			}
+			
+			//" cannot be escaped
+			else
+			{
+				in_quote = !in_quote;
+			}
+		}
+		
+		//see if strings match
+		if((haystack[i] == needle[0]) && (i + needle_len < haystack_len) && !in_quote)
+		{
+			int match = 1;
+			for(int j = 0; j < strlen(needle); j++)
+			{
+				if(needle[j] != haystack[i + j])
+				{
+					match = 0;
+					break;
+				}
+			}
+			
+			if(match)
+			{
+				return 1;
+			}
+		}
+	}
+	
+	return 0;
 }
