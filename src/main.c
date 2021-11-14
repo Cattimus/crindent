@@ -3,6 +3,7 @@
 #include<stdlib.h>
 
 //TODO - --check flag to see if file has mixed tabs and spaces
+//TODO - lines with empty whitespace are getting ignored
 
 //flags for indent options
 int spaces = 0;
@@ -11,7 +12,7 @@ int indent_width = 4;
 
 void print_help();
 void strip(char* line);
-char* indent(char* line, int level);
+void indent(char* line, int level);
 int nq_search(char* needle, char* haystack);
 int mixed_indent(char* line);
 
@@ -24,19 +25,73 @@ int main(int argc, char* argv[])
 		print_help();
 		exit(1);
 	}
-	*/
+	* */
 	
-	char test[] = "\t\t    this \"is a test {\"\n";
+	//line buffer
+	char buff[100][8192];
+	memset(buff, 0, 100 * 8192);
+	int line_index = 0;
 	
-	if(nq_search("{", test))
+	//read file line by line and print the lines
+	char line[8192];
+	memset(line, 0, 8192);
+	FILE* input = fopen("test.cpp", "r");
+	int indent_level = 0;
+	
+	FILE* output = fopen("test - copy.cpp", "w");
+	
+	
+	while(fgets(line, 8192, input) != NULL)
 	{
-		printf("String was found\n");
-	}
-	else
-	{
-		printf("String not found\n");
+		//strip indent
+		strip(line);
+		
+		//this must happen before indentation
+		if(nq_search("}", line))
+		{
+			indent_level--;
+		}
+		
+		indent(line, indent_level);
+		
+		//copy line to buffer
+		strcpy(buff[line_index], line);
+		line_index++;	
+		
+		//TODO - can be multiple "{" and "}" per line
+		if(nq_search("{", line))
+		{
+			indent_level++;
+		}
+
+		
+		
+		//empty buffer to file
+		if(line_index == 100)
+		{
+			for(int i = 0; i < 100; i++)
+			{
+				fprintf(output, "%s", buff[i]);
+				memset(buff[i], 0, 8192);
+			}
+			
+			line_index = 0;
+		}
+		
+		//reset line
+		memset(line, 0, 8192);
 	}
 	
+	for(int i = 0; i < line_index; i++)
+	{
+		fprintf(output, "%s", buff[i]);
+		memset(buff[i], 0, 8192);
+	}
+			
+		line_index = 0;
+	
+	fclose(input);
+	fclose(output);
 	
 	return 0;
 }
@@ -66,6 +121,12 @@ void strip(char* line)
 		}
 	}
 	
+	
+	if(counter == 0)
+	{
+		return;
+	}
+	
 	//move back counter characters
 	for(int i = counter; i < len; i++)
 	{
@@ -74,7 +135,7 @@ void strip(char* line)
 	}
 }
 
-//returns 1 if tabs and spaces have been mixed
+//returns 1 if tabs and spaces have been mixed (single line)
 int mixed_indent(char* line)
 {
 	int has_space = 0;
@@ -102,15 +163,15 @@ int mixed_indent(char* line)
 }
 
 //indent a previously stripped line to a new level
-char* indent(char* line, int level)
+void indent(char* line, int level)
 {
 	//indent with tabs
 	if(tabs)
 	{
 		int curlen = strlen(line);
 		int newlen = curlen + level;
-		char* to_return = malloc(newlen);
-		memset(to_return, 0, newlen);
+		char to_return[8192];
+		memset(to_return, 0, 8192);
 		
 		for(int i = 0; i < level; i++)
 		{
@@ -118,7 +179,7 @@ char* indent(char* line, int level)
 		}
 		
 		strcpy(to_return + level, line);
-		return to_return;
+		strcpy(line, to_return);
 	}
 	
 	//indent with spaces
@@ -126,16 +187,16 @@ char* indent(char* line, int level)
 	{
 		int curlen = strlen(line);
 		int newlen = curlen + level * indent_width;
-		char* to_return = malloc(newlen);
-		memset(to_return, 0, newlen);
+		char to_return[8192];
+		memset(to_return, 0, 8192);
 		
-		for(int i = 0; i < level * indent_width; i++)
+		for(int i = 0; i < level * 4; i++)
 		{
 			to_return[i] = ' ';
 		}
 		
-		strcpy(to_return + (level * 4), line);
-		return to_return;
+		strcpy(to_return + level * 4, line);
+		strcpy(line, to_return);
 	}
 }
 
