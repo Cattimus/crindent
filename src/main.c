@@ -1,97 +1,45 @@
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 //TODO - --check flag to see if file has mixed tabs and spaces
-//TODO - lines with empty whitespace are getting ignored
 
 //flags for indent options
 int spaces = 0;
 int tabs = 1;
 int indent_width = 4;
 
+//flags for operations
+int check_file = 0;
+int replace_file = 0;
+
+const int LINE_MAX = 8192;
+
 void print_help();
 void strip(char* line);
-void indent(char* line, int level);
-int nq_search(char* needle, char* haystack);
 int mixed_indent(char* line);
+void replace_file(char* input);
+void indent(char* line, int level);
+void copy_file(char* input, char* output);
+int nq_search(char* needle, char* haystack);
 
 int main(int argc, char* argv[])
 {
-	/*
 	//too few arguments
 	if(argc < 2)
 	{
 		print_help();
 		exit(1);
 	}
-	* */
 	
-	//line buffer
-	char buff[100][8192];
-	memset(buff, 0, 100 * 8192);
-	int line_index = 0;
+	//handle arguments here
+	//create list of files
 	
-	//read file line by line and print the lines
-	char line[8192];
-	memset(line, 0, 8192);
-	FILE* input = fopen("test.cpp", "r");
-	int indent_level = 0;
-	
-	FILE* output = fopen("test - copy.cpp", "w");
-	
-	
-	while(fgets(line, 8192, input) != NULL)
+	//replace or check files
+	for(int i = 1; i < argc; i++)
 	{
-		//strip indent
-		strip(line);
-		
-		//this must happen before indentation
-		if(nq_search("}", line))
-		{
-			indent_level--;
-		}
-		
-		indent(line, indent_level);
-		
-		//copy line to buffer
-		strcpy(buff[line_index], line);
-		line_index++;	
-		
-		//TODO - can be multiple "{" and "}" per line
-		if(nq_search("{", line))
-		{
-			indent_level++;
-		}
-
-		
-		
-		//empty buffer to file
-		if(line_index == 100)
-		{
-			for(int i = 0; i < 100; i++)
-			{
-				fprintf(output, "%s", buff[i]);
-				memset(buff[i], 0, 8192);
-			}
-			
-			line_index = 0;
-		}
-		
-		//reset line
-		memset(line, 0, 8192);
+		replace_file(argv[i]);
 	}
-	
-	for(int i = 0; i < line_index; i++)
-	{
-		fprintf(output, "%s", buff[i]);
-		memset(buff[i], 0, 8192);
-	}
-			
-		line_index = 0;
-	
-	fclose(input);
-	fclose(output);
 	
 	return 0;
 }
@@ -121,13 +69,13 @@ void strip(char* line)
 		}
 	}
 	
-	
+	//line has no beginning whitespace
 	if(counter == 0)
 	{
 		return;
 	}
 	
-	//move back counter characters
+	//move entire string to beginning (if whitespace was removed)
 	for(int i = counter; i < len; i++)
 	{
 		line[i - counter] = line[i];
@@ -170,8 +118,8 @@ void indent(char* line, int level)
 	{
 		int curlen = strlen(line);
 		int newlen = curlen + level;
-		char to_return[8192];
-		memset(to_return, 0, 8192);
+		char to_return[LINE_MAX];
+		memset(to_return, 0, LINE_MAX);
 		
 		for(int i = 0; i < level; i++)
 		{
@@ -187,15 +135,15 @@ void indent(char* line, int level)
 	{
 		int curlen = strlen(line);
 		int newlen = curlen + level * indent_width;
-		char to_return[8192];
-		memset(to_return, 0, 8192);
+		char to_return[LINE_MAX];
+		memset(to_return, 0, LINE_MAX);
 		
-		for(int i = 0; i < level * 4; i++)
+		for(int i = 0; i < level * indent_width; i++)
 		{
 			to_return[i] = ' ';
 		}
 		
-		strcpy(to_return + level * 4, line);
+		strcpy(to_return + level * indent_width, line);
 		strcpy(line, to_return);
 	}
 }
@@ -248,4 +196,136 @@ int nq_search(char* needle, char* haystack)
 	}
 	
 	return 0;
+}
+
+void copy_file(char* input, char* output)
+{
+	//line buffer
+	char buff[100][LINE_MAX];
+	memset(buff, 0, 100 * LINE_MAX);
+	int line_index = 0;
+	
+	//read file line by line and print the lines
+	char line[LINE_MAX];
+	memset(line, 0, LINE_MAX);
+	FILE* input_file = fopen(input, "r");
+	FILE* output_file = fopen(output, "w");
+	
+	if(input_file == NULL || output_file == NULL)
+	{
+		fprintf(stderr, "Error opening file %s. File will not be replaced.\n", input);
+		return;
+	}
+	
+	while(fgets(line, LINE_MAX, input_file) != NULL)
+	{	
+		//copy line to buffer
+		strcpy(buff[line_index], line);
+		line_index++;	
+		
+		//empty buffer to file
+		if(line_index == 100)
+		{
+			for(int i = 0; i < 100; i++)
+			{
+				fprintf(output_file, "%s", buff[i]);
+				memset(buff[i], 0, LINE_MAX);
+			}
+			
+			line_index = 0;
+		}
+		
+		//reset line
+		memset(line, 0, LINE_MAX);
+	}
+	
+	//print remaining lines in buffer
+	for(int i = 0; i < line_index; i++)
+	{
+		fprintf(output_file, "%s", buff[i]);
+		memset(buff[i], 0, LINE_MAX);
+	}	
+	line_index = 0;
+	
+	fclose(input_file);
+	fclose(output_file);
+}
+
+void replace_file(char* input)
+{
+	char old_file[LINE_MAX];
+	memset(old_file, 0, 8192);
+	strcpy(old_file, input);
+	strcat(old_file, ".old");
+	copy_file(input, old_file);
+	
+	//line buffer
+	char buff[100][LINE_MAX];
+	memset(buff, 0, 100 * LINE_MAX);
+	int line_index = 0;
+	
+	//read file line by line and print the lines
+	char line[LINE_MAX];
+	memset(line, 0, LINE_MAX);
+	FILE* input_file = fopen(old_file, "r");
+	FILE* output_file = fopen(input, "w");
+	int indent_level = 0;
+	
+	if(input_file == NULL || output_file == NULL)
+	{
+		fprintf(stderr, "Error opening file %s. File will not be replaced.\n", input);
+		return;
+	}
+	
+	while(fgets(line, LINE_MAX, input_file) != NULL)
+	{
+		//strip indent
+		strip(line);
+		
+		//this must happen before indent function
+		//decreases indent level
+		if(nq_search("}", line))
+		{
+			indent_level--;
+		}
+		
+		indent(line, indent_level);
+		
+		//copy line to buffer
+		strcpy(buff[line_index], line);
+		line_index++;	
+		
+		//TODO - edge case - can be multiple "{" and "}" per line
+		//increase indent level
+		if(nq_search("{", line))
+		{
+			indent_level++;
+		}
+		
+		//empty buffer to file
+		if(line_index == 100)
+		{
+			for(int i = 0; i < 100; i++)
+			{
+				fprintf(output_file, "%s", buff[i]);
+				memset(buff[i], 0, LINE_MAX);
+			}
+			
+			line_index = 0;
+		}
+		
+		//reset line
+		memset(line, 0, LINE_MAX);
+	}
+	
+	//print remaining lines in buffer
+	for(int i = 0; i < line_index; i++)
+	{
+		fprintf(output_file, "%s", buff[i]);
+		memset(buff[i], 0, LINE_MAX);
+	}	
+	line_index = 0;
+	
+	fclose(input_file);
+	fclose(output_file);
 }
