@@ -4,6 +4,9 @@
 
 //TODO - --check flag to see if file has mixed tabs and spaces
 
+const int LINE_MAX = 8192;
+const int BUFF_SIZE = 100;
+
 //flags for indent options
 int spaces = 0;
 int tabs = 1;
@@ -11,17 +14,24 @@ int indent_width = 4;
 
 //flags for operations
 int check_file = 0;
-int replace_file = 0;
 
-const int LINE_MAX = 8192;
-
+//helper function for arguments
 void print_help();
+
+//indentation functions
 void strip(char* line);
-int mixed_indent(char* line);
-void replace_file(char* input);
+int mixed_indent(const char* line);
 void indent(char* line, int level);
-void copy_file(char* input, char* output);
-int nq_search(char* needle, char* haystack);
+int check_indent(const char* filename);
+
+//file operations
+void replace_file(const char* input);
+int copy_file(const char* input, const char* output);
+void process_files(char files[][LINE_MAX], int* num_files);
+void write_buffer(char buff[][LINE_MAX], int* index, FILE* output);
+
+//search functions
+int nq_search(const char* needle, const char* haystack);
 
 int main(int argc, char* argv[])
 {
@@ -32,13 +42,54 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 	
-	//handle arguments here
-	//create list of files
+	//buffer to hold file names
+	char files[BUFF_SIZE][LINE_MAX];
+	int file_index = 0;
+	memset(files, 0, BUFF_SIZE * LINE_MAX);
 	
-	//replace or check files
+	//process arguments
 	for(int i = 1; i < argc; i++)
 	{
-		replace_file(argv[i]);
+		//argument is a parameter
+		if(strncmp(argv[i], "-", 1) == 0)
+		{
+			if(strncmp(argv[i], "-spaces", 7) == 0)
+			{
+				spaces = 1;
+				tabs = 0;
+			}
+			
+			else if(strncmp(argv[i], "-width", 6) == 0)
+			{
+				char* width = strtok(argv[i], "=");
+				width = strtok(NULL, "=");
+				indent_width = atoi(width);
+			}
+			
+			else if(strncmp(argv[i], "-check", 6) == 0)
+			{
+				check_file = 1;
+			}
+		}
+		
+		//argument is a filename
+		else
+		{
+			strcpy(files[file_index], argv[i]);
+			file_index++;
+			
+			//process all files in the buffer and empty buffer
+			if(file_index == BUFF_SIZE)
+			{
+				process_files(files, &file_index);
+			}
+		}
+	}
+	
+	//process any additional files that haven't been processed
+	if(file_index > 0)
+	{
+		process_files(files, &file_index);
 	}
 	
 	return 0;
@@ -46,7 +97,11 @@ int main(int argc, char* argv[])
 
 void print_help()
 {
-	fprintf(stderr, "Usage: crindent [filename]...\n");
+	fprintf(stderr, "Usage: crindent [flags] [file1] [file2]...\n\n");
+	fprintf(stderr, "[FLAGS]\n");
+	fprintf(stderr, "-spaces:  use spaces instead of tabs (default width 4)\n");
+	fprintf(stderr, "-width=n: sets the width in spaces to n\n");
+	fprintf(stderr, "-check:   will check for mixed tabs and width instead of replacing files\n");
 }
 
 //remove whitespace from the beginning of a line
@@ -84,7 +139,7 @@ void strip(char* line)
 }
 
 //returns 1 if tabs and spaces have been mixed (single line)
-int mixed_indent(char* line)
+int mixed_indent(const char* line)
 {
 	int has_space = 0;
 	int has_tab = 0;
@@ -149,7 +204,7 @@ void indent(char* line, int level)
 }
 
 //search through a string while ignoring text from quotes
-int nq_search(char* needle, char* haystack)
+int nq_search(const char* needle, const char* haystack)
 {
 	int haystack_len = strlen(haystack);
 	int needle_len = strlen(needle);
@@ -198,23 +253,30 @@ int nq_search(char* needle, char* haystack)
 	return 0;
 }
 
-void copy_file(char* input, char* output)
+int copy_file(const char* input, const char* output)
 {
 	//line buffer
-	char buff[100][LINE_MAX];
-	memset(buff, 0, 100 * LINE_MAX);
+	char buff[BUFF_SIZE][LINE_MAX];
+	memset(buff, 0, BUFF_SIZE * LINE_MAX);
 	int line_index = 0;
 	
 	//read file line by line and print the lines
 	char line[LINE_MAX];
 	memset(line, 0, LINE_MAX);
-	FILE* input_file = fopen(input, "r");
-	FILE* output_file = fopen(output, "w");
 	
-	if(input_file == NULL || output_file == NULL)
+	FILE* input_file = fopen(input, "r");
+	if(input_file == NULL)
 	{
 		fprintf(stderr, "Error opening file %s. File will not be replaced.\n", input);
-		return;
+		return 0;
+	}
+	
+	//output file will only be opened if there was no issue opening input file
+	FILE* output_file = fopen(output, "w");
+	if(output_file == NULL)
+	{
+		fprintf(stderr, "Error opening file %s. File will not be replaced.\n", output);
+		return 0;
 	}
 	
 	while(fgets(line, LINE_MAX, input_file) != NULL)
@@ -224,54 +286,58 @@ void copy_file(char* input, char* output)
 		line_index++;	
 		
 		//empty buffer to file
-		if(line_index == 100)
+		if(line_index == BUFF_SIZE)
 		{
-			for(int i = 0; i < 100; i++)
-			{
-				fprintf(output_file, "%s", buff[i]);
-				memset(buff[i], 0, LINE_MAX);
-			}
-			
-			line_index = 0;
+			write_buffer(buff, &line_index, output_file);
 		}
 		
 		//reset line
 		memset(line, 0, LINE_MAX);
 	}
 	
-	//print remaining lines in buffer
-	for(int i = 0; i < line_index; i++)
+	//empty remaining lines from buffer
+	if(line_index > 0)
 	{
-		fprintf(output_file, "%s", buff[i]);
-		memset(buff[i], 0, LINE_MAX);
-	}	
-	line_index = 0;
+		write_buffer(buff, &line_index, output_file);
+	}
 	
 	fclose(input_file);
 	fclose(output_file);
+	
+	return 1;
 }
 
-void replace_file(char* input)
+void replace_file(const char* input)
 {
 	char old_file[LINE_MAX];
-	memset(old_file, 0, 8192);
+	memset(old_file, 0, LINE_MAX);
 	strcpy(old_file, input);
 	strcat(old_file, ".old");
-	copy_file(input, old_file);
+	if(!copy_file(input, old_file))
+	{
+		return;
+	}
 	
 	//line buffer
-	char buff[100][LINE_MAX];
-	memset(buff, 0, 100 * LINE_MAX);
+	char buff[BUFF_SIZE][LINE_MAX];
+	memset(buff, 0, BUFF_SIZE * LINE_MAX);
 	int line_index = 0;
 	
 	//read file line by line and print the lines
 	char line[LINE_MAX];
 	memset(line, 0, LINE_MAX);
-	FILE* input_file = fopen(old_file, "r");
-	FILE* output_file = fopen(input, "w");
 	int indent_level = 0;
 	
-	if(input_file == NULL || output_file == NULL)
+	//open files
+	FILE* input_file = fopen(old_file, "r");
+	if(input_file == NULL)
+	{
+		fprintf(stderr, "Error opening file %s. File will not be replaced.\n", old_file);
+		return;
+	}
+	
+	FILE* output_file = fopen(input, "w");
+	if(output_file == NULL)
 	{
 		fprintf(stderr, "Error opening file %s. File will not be replaced.\n", input);
 		return;
@@ -303,29 +369,46 @@ void replace_file(char* input)
 		}
 		
 		//empty buffer to file
-		if(line_index == 100)
+		if(line_index == BUFF_SIZE)
 		{
-			for(int i = 0; i < 100; i++)
-			{
-				fprintf(output_file, "%s", buff[i]);
-				memset(buff[i], 0, LINE_MAX);
-			}
-			
-			line_index = 0;
+			write_buffer(buff, &line_index, output_file);
 		}
 		
 		//reset line
 		memset(line, 0, LINE_MAX);
 	}
 	
-	//print remaining lines in buffer
-	for(int i = 0; i < line_index; i++)
+	if(line_index > 0)
 	{
-		fprintf(output_file, "%s", buff[i]);
-		memset(buff[i], 0, LINE_MAX);
-	}	
-	line_index = 0;
+		write_buffer(buff, &line_index, output_file);
+	}
 	
 	fclose(input_file);
 	fclose(output_file);
+}
+
+//helper function to clear writing buffer in file replace
+void write_buffer(char buff[][LINE_MAX], int* index, FILE* output)
+{
+	for(int i = 0; i < *index; i++)
+	{
+		fprintf(output, "%s", buff[i]);
+		memset(buff[i], 0, LINE_MAX);
+	}
+	
+	*index = 0;
+}
+
+//process list of files
+void process_files(char files[][LINE_MAX], int* num_files)
+{
+	for(int i = 0; i < *num_files; i++)
+	{
+		printf("Replacing file %s...\n", files[i]);
+		//have to process checking files here too
+		replace_file(files[i]);
+		memset(files[i], 0, LINE_MAX);
+	}
+	
+	*num_files = 0;
 }
